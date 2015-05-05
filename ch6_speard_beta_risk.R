@@ -1,5 +1,44 @@
 library(quantmod)
 
+# f3_1_spread_out_of_sample(results=results)
+f3_1_spread_out_of_sample <- function(SPY=NA, AAPL=NA,results=NA) {
+    start_date_out_sample = "2012-01-01"
+    end_date_out_sample = "2012-10-22"
+    
+    if(is.na(SPY)) {
+        SPY = getSymbols('SPY', from = start_date_out_sample,
+                         to = end_date_out_sample, adjust=T, auto.assign = FALSE)
+    }
+    
+    if(is.na(AAPL)) {
+        AAPL = getSymbols('AAPL', from = start_date_out_sample,
+                          to = end_date_out_sample, adjust=T, auto.assign = FALSE)
+    }
+    
+    x = SPY[,6]
+    y = AAPL[,6]
+    
+    range = paste(start_date_out_sample,"::",
+            end_date_out_sample, sep="")
+    
+    # Out of sample analysis
+    spread_out_of_sample = calculate_spread(
+        x[range],
+        y[range],
+        results$beta
+    )
+    
+    plot(spread_out_of_sample, ylab="Spread out of sample",
+         main = "AAPL - beta * SPY",
+         cex.main = 0.8,
+         cex.lab = 0.8,
+         cex.axis = 0.8
+    )
+    abline(h = results$level, lwd=2)
+}
+
+
+# results = f3_plot_spread_level()
 f3_plot_spread_level <- function (SPY=NA, AAPL=NA) {
     start_date = "2009-01-01"
     end_date   = "2011-12-31"
@@ -19,11 +58,9 @@ f3_plot_spread_level <- function (SPY=NA, AAPL=NA) {
     
     results = calculate_beta_and_level(x,y,start_date,end_date)
     
-    message ("Beta: ")
-    results$beta
+    message ("Beta: ", results$beta)
+    message ("Level: ", results$level)
     
-    message ("Level: ")
-    results$level
     
     plot(results$spread, ylab="Spread Value",
             main = "AAPL - beta * SPY",
@@ -32,6 +69,7 @@ f3_plot_spread_level <- function (SPY=NA, AAPL=NA) {
             cex.axis = 0.8
         )
     
+    return(results)
 }
 
 # Function to calculate the spread
