@@ -1,5 +1,57 @@
 library(quantmod)
 
+f4_rolling_beta <- function() {
+    # Rolling window of trading days
+    window_length = 10
+    
+    # Time range
+    start_date = "2011-01-01"
+    end_date   = "2011-12-31"
+    range <-paste(start_date, "::", end_date, sep="")
+    
+    # Stocks pair
+    SPY = getSymbols('SPY', from = start_date,
+            to = end_date, adjust=T, auto.assign = FALSE)
+    
+    AAPL = getSymbols('AAPL', from = start_date,
+            to = end_date, adjust=T, auto.assign = FALSE)
+    
+    dF = cbind(x,y)
+    names(dF) = c("x", "y")
+    
+    betas = rolling_beta(diff(dF), window_length)
+    
+    data = merge(betas, dF)
+    data$spread = data$y - lag(betas,1) * data$x
+    
+    returns = diff(dF) / dF
+    return_beta = rolling_beta(returns, window_length)
+    data$spreadR = diff(data$y) / data$y - 
+        return_beta * diff(data$x) / data$x
+    
+    print(tail(data))
+    
+    plot(data$spreadR, ylab="Rolling Spread",
+         main = "SPY, AAPL rolling beta",
+         cex.main = 0.8,
+         cex.lab = 0.8,
+         cex.axis = 0.8
+    )
+    
+    return(data)
+}
+
+# Calculate betas
+run_regression <- function(dF) {
+    return(coef(lm(y ~ x-1, data=as.data.frame(dF))) )
+}
+
+rolling_beta <- function(z, width) {
+    rollapply(z,width=width, FUN=run_regression,
+            by.column=FALSE, align="right"
+        )
+}
+
 # f3_1_spread_out_of_sample(results=results)
 f3_1_spread_out_of_sample <- function(SPY=NA, AAPL=NA,results=NA) {
     start_date_out_sample = "2012-01-01"
