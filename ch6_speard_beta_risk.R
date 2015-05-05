@@ -1,5 +1,32 @@
 library(quantmod)
 
+f2_TLS_regression_SPY_AAPL <- function() {
+    SPY = getSymbols('SPY', from = '2011-01-01',
+        to = '2012-12-31', adjust=T, auto.assign = FALSE)
+    
+    AAPL = getSymbols('AAPL', from = '2011-01-01',
+                     to = '2012-12-31', adjust=T, auto.assign = FALSE)
+    
+    x = diff(as.numeric(SPY[,4]))
+    y = diff(as.numeric(AAPL[,4]))
+    
+    plot(x,y, main="Scatter plot of return. SPY vs AAPL",
+        cex.main=0.8, cex.lab=0.8, cex.axis=0.8)
+    abline(lm(y~x))
+    abline(lm(x~y), lty=2)
+    grid()
+    
+    # Total least squares regression
+    r = prcomp( ~ x + y )
+    slope = r$rotation[2,1] / r$rotation[1,1]
+    intercept = r$center[2] - slope * r$center[1]
+    
+    # Show the first principal component on the plot
+    abline(a=intercept, b=slope, lty=3)
+    
+    
+}
+
 f1_scatter_plot_coke_pepsi <- function() {
     pepsi = getSymbols('PEP', from = '2013-01-01',
         to = '2014-01-01', adjust=T, auto.assign = FALSE)
