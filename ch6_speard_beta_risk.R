@@ -4,11 +4,11 @@ library(ggplot2)
 
 f5_out_of_sample_spread <- function() {
     # Rolling window of trading days
-    window_length = 15
+    window_length = 10
 
     # Time range
-    start_date = "2011-01-01"
-    end_date   = "2011-12-31"
+    start_date = "2012-01-01"
+    end_date   = "2012-12-31"
     range <-paste(start_date, "::", end_date, sep="")
 
     # Stocks pair
@@ -22,6 +22,9 @@ f5_out_of_sample_spread <- function() {
     x <- SPY[range, 6]
     y <- AAPL[range, 6]
 
+    # y <- SPY[range, 6]
+    # x <- AAPL[range, 6]
+
     dF = cbind(x,y)
     names(dF) = c("x", "y")
 
@@ -33,11 +36,14 @@ f5_out_of_sample_spread <- function() {
     data_out$spread <-data_out$y -data_out$beta_price
 
 
-    threshold <- sd(data_out$spread, na.rm = TRUE) / 2
+    # threshold <- sd(data_out$spread, na.rm = TRUE)
+    data_out$threshold <- rolling_sd(data_out$spread, window_length)
 
     # Generate signals
-    buys <- ifelse(data_out$spread > threshold, 1, 0)
-    sells <- ifelse(data_out$spread < -threshold, -1, 0)
+    # buys <- ifelse(data_out$spread > threshold, 1, 0)
+    # sells <- ifelse(data_out$spread < -threshold, -1, 0)
+    buys <- ifelse(data_out$spread > data_out$threshold, 1, 0)
+    sells <- ifelse(data_out$spread < -data_out$threshold, -1, 0)
 
     data_out$signal <- buys + sells
 
@@ -58,14 +64,21 @@ f5_trade_spread <- function(data_out) {
     signal[is.na(signal)] <- 0
     beta <- as.numeric(data_out$beta_out_of_sample)
 
+    price_x <- as.numeric(data_out$x)
+    price_y <- as.numeric(data_out$y)
+
     qty_x <- rep(0,length(signal))
     qty_y <- rep(0,length(signal))
 
     for(i in 1:length(signal)) {
-        cat("Current signal:", signal[i], "position:", position, "-- prev_x_qty:", prev_x_qty )
+        cat( as.character(index(data_out[i])), "Current sig:", signal[i], "pos:", position, "B:", beta[i] , "--","prev_x_qty:", prev_x_qty )
         if(signal[i] == 1  && position == 0) {
             # Initial Buy
-            prev_x_qty <- round(beta[i] * trade_size)
+            # prev_x_qty <- round(beta[i] * trade_size)
+
+            # Balance price
+            prev_x_qty <- round(price_y[i] * trade_size / price_x[i])
+
             qty_x[i] <- -prev_x_qty # Short
             qty_y[i] <- trade_size # long
             position <- 1
@@ -73,7 +86,11 @@ f5_trade_spread <- function(data_out) {
 
         if(signal[i] == -1  && position == 0) {
             # Initial Sell
-            prev_x_qty <- round(beta[i] * trade_size)
+            # prev_x_qty <- round(beta[i] * trade_size)
+
+            # Balance price
+            prev_x_qty <- round(price_y[i] * trade_size / price_x[i])
+
             qty_x[i] <- prev_x_qty
             qty_y[i] <- -trade_size
             position <- -1
@@ -81,20 +98,47 @@ f5_trade_spread <- function(data_out) {
 
         if(signal[i] == 1  && position == -1) {
             # In short spread, need to Buy
-            qty_x[i] <- -(round(beta[i] * trade_size) + prev_x_qty)
-            prev_x_qty <- round(beta[i] * trade_size)
+            # qty_x[i] <- -(round(beta[i] * trade_size) + prev_x_qty)
+            # prev_x_qty <- round(beta[i] * trade_size)
+
+            # Balance price
+            target_qty <- round(price_y[i] * trade_size / price_x[i])
+            qty_x[i] <- -(target_qty + prev_x_qty)
+            prev_x_qty <- target_qty
+
             qty_y[i] <- 2 * trade_size
             position <- 1
         }
 
         if(signal[i] == -1  && position == 1) {
             # In long spread, need to Sell
-            qty_x[i] <- round(beta[i] * trade_size) + prev_x_qty
-            prev_x_qty <- round(beta[i] * trade_size)
+            # qty_x[i] <- round(beta[i] * trade_size) + prev_x_qty
+            # prev_x_qty <- round(beta[i] * trade_size)
+
+            # Balance price
+            target_qty <- round(price_y[i] * trade_size / price_x[i])
+            qty_x[i] <- target_qty + prev_x_qty
+            prev_x_qty <- target_qty
+
             qty_y[i] <- -2 * trade_size
             position <- -1
         }
-        cat("  ==>>", "qty_x:", qty_x[i], "qty_y:", qty_y[i], "\n")
+
+        # adjust qty  by Beta to balance the risk
+        # if(signal[i] == -1  && position == -1) {
+        #     qty_x[i] <- round(beta[i] * trade_size) - prev_x_qty
+        #     prev_x_qty <- round(beta[i] * trade_size)
+        # }
+        #
+        # if(signal[i] == 1  && position == 1) {
+        #     qty_x[i] <- round(beta[i] * trade_size) - prev_x_qty
+        #     prev_x_qty <- round(beta[i] * trade_size)
+        # }
+
+        cat("  ==>>", "qty_x:", qty_x[i], "qty_y:", qty_y[i])
+        cat(" P(x,y) (", data_out[i]$x, "," ,data_out[i]$y, ")" )
+        cat(" Vol(x,y) (", prev_x_qty * -(position), ",", position * trade_size, ")"  )
+        cat("\n")
 
     }
 
@@ -114,6 +158,8 @@ f5_trade_spread <- function(data_out) {
     data_out$equity_curve_sum <- data_out$equity_curve_x + data_out$equity_curve_y
 
     f5_plot_equity_curve(data_out)
+    # f5_plot_equity_curve_y(data_out)
+    # f5_plot_equity_curve_x(data_out)
 }
 
 f5_plot_equity_curve <- function(data_out) {
@@ -132,8 +178,48 @@ f5_plot_equity_curve <- function(data_out) {
 
     point_type[buy_index] <- 21
     point_type[sell_index] <- 24
-    points(data_out$y, pch = point_type)
-    lines(data_out$y)
+    points(data_out$equity_curve_sum, pch = point_type)
+    lines(data_out$equity_curve_sum)
+}
+
+f5_plot_equity_curve_y <- function(data_out) {
+    # ggplot(data = data_out, aes(x = Index, y = equity_curve_sum)) + geom_line()
+
+    plot(data_out$equity_curve_y, ylab="Rolling Spread",
+         main = "AAPL vs SPY equity (AAPL)",
+         cex.main = 0.8,
+         cex.lab = 0.8,
+         cex.axis = 0.8
+    )
+
+    point_type <- rep(NA, nrow(data_out))
+    buy_index <- which(data_out$signal == 1)
+    sell_index <- which(data_out$signal == -1)
+
+    point_type[buy_index] <- 21
+    point_type[sell_index] <- 24
+    points(data_out$equity_curve_y, pch = point_type)
+    lines(data_out$equity_curve_y)
+}
+
+f5_plot_equity_curve_x <- function(data_out) {
+    # ggplot(data = data_out, aes(x = Index, y = equity_curve_sum)) + geom_line()
+
+    plot(data_out$equity_curve_x, ylab="Rolling Spread",
+         main = "AAPL vs SPY equity (SPY)",
+         cex.main = 0.8,
+         cex.lab = 0.8,
+         cex.axis = 0.8
+    )
+
+    point_type <- rep(NA, nrow(data_out))
+    buy_index <- which(data_out$signal == 1)
+    sell_index <- which(data_out$signal == -1)
+
+    point_type[buy_index] <- 21
+    point_type[sell_index] <- 24
+    points(data_out$equity_curve_x, pch = point_type)
+    lines(data_out$equity_curve_x)
 }
 
 compute_equity_curve <- function(qty, price) {
@@ -279,6 +365,27 @@ rolling_beta <- function(z, width) {
             by.column=FALSE, align="right"
         )
 }
+
+cal_threshold <- function(spread) {
+    sd(spread, na.rm = FALSE)
+}
+
+rolling_sd <- function(z, width) {
+
+    rollapply(z,width=width, FUN=cal_threshold,
+              by.column=FALSE, align="right"
+    )
+}
+
+# cal_mean <- function(spread) {
+#     mean(spread, na.rm = TRUE)
+# }
+#
+# rolling_mean <- function(z, width) {
+#     rollapply(z,width=width, FUN=cal_threshold,
+#               by.column=FALSE, align="right"
+#     )
+# }
 
 # f3_1_spread_out_of_sample(results=results)
 f3_1_spread_out_of_sample <- function(SPY=NA, AAPL=NA,results=NA) {
